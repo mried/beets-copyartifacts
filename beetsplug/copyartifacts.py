@@ -108,26 +108,42 @@ class CopyArtifactsPlugin(BeetsPlugin):
         except TypeError:
             source_path = os.path.dirname(task.old_paths[0])
 
+        if os.path.isfile(source_path):
+            source_path = os.path.dirname(source_path)
+
         # Check if this path has already been processed
         if source_path in self._dirs_seen:
             return
 
         non_handled_files = []
+        stop_paths = []
         for root, dirs, files in beets.util.sorted_walk(
                     source_path, ignore=config['ignore'].as_str_seq()):
-            for filename in files:
-                source_file = os.path.join(root, filename)
+            for stop_path in stop_paths:
+                if root.startswith(stop_path):
+                    break
+            else:
+                non_handled_files_of_dir = []
+                found_file_handled_by_beets = False
+                for filename in files:
+                    source_file = os.path.join(root, filename)
 
-                # Skip file, usually reimports to same dir
-                if album_path == os.path.dirname(source_file):
-                    continue
+                    # Skip file, usually reimports to same dir
+                    if album_path == os.path.dirname(source_file):
+                        continue
 
-                # Skip any files extensions handled by beets
-                file_ext = os.path.splitext(filename)[1]
-                if len(file_ext) > 1 and file_ext[1:] in TYPES:
-                    continue
+                    # Skip any files extensions handled by beets
+                    file_ext = os.path.splitext(filename)[1]
+                    if len(file_ext) > 1 and file_ext[1:] in TYPES:
+                        if root == source_path:
+                            continue
+                        found_file_handled_by_beets = True
+                        stop_paths.append(root)
+                        break
 
-                non_handled_files.append(source_file)
+                    non_handled_files_of_dir.append(source_file)
+                if not found_file_handled_by_beets:
+                    non_handled_files.extend(non_handled_files_of_dir)
 
         if task.replaced_items[imported_item]:
             # these will be reimports when dir has changed
@@ -150,17 +166,30 @@ class CopyArtifactsPlugin(BeetsPlugin):
             return
 
         non_handled_files = []
+        stop_paths = []
         for root, dirs, files in beets.util.sorted_walk(
                     source_path, ignore=config['ignore'].as_str_seq()):
-            for filename in files:
-                source_file = os.path.join(root, filename)
+            for stop_path in stop_paths:
+                if root.startswith(stop_path):
+                    break
+            else:
+                non_handled_files_of_dir = []
+                found_file_handled_by_beets = False
+                for filename in files:
+                    source_file = os.path.join(root, filename)
 
-                # Skip any files extensions handled by beets
-                file_ext = os.path.splitext(filename)[1]
-                if len(file_ext) > 1 and file_ext[1:] in TYPES:
-                    continue
+                    # Skip any files extensions handled by beets
+                    file_ext = os.path.splitext(filename)[1]
+                    if len(file_ext) > 1 and file_ext[1:] in TYPES:
+                        if root == source_path:
+                            continue
+                        found_file_handled_by_beets = True
+                        stop_paths.append(root)
+                        break
 
-                non_handled_files.append(source_file)
+                    non_handled_files_of_dir.append(source_file)
+                if not found_file_handled_by_beets:
+                    non_handled_files.extend(non_handled_files_of_dir)
 
         self._process_queue.extend([{
             'files': non_handled_files,
